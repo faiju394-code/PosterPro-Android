@@ -1,0 +1,63 @@
+
+name: Build PosterPro APK
+
+on:
+  workflow_dispatch:
+  push:
+    paths:
+      - 'posterpro.zip'
+      - '.github/workflows/build-apk.yml'
+
+permissions:
+  contents: read
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Extract PosterPro project
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y unzip
+          mkdir project
+          unzip -q posterpro.zip -d project
+          if [ -f project/settings.gradle.kts ]; then
+            echo "PROJECT_DIR=project" >> "$GITHUB_ENV"
+          else
+            SETTINGS_FILE=$(find project -name settings.gradle.kts -print -quit)
+            if [ -z "$SETTINGS_FILE" ]; then
+              echo "settings.gradle.kts was not found in the ZIP."
+              exit 1
+            fi
+            echo "PROJECT_DIR=$(dirname "$SETTINGS_FILE")" >> "$GITHUB_ENV"
+          fi
+
+      - name: Set up Java
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+
+      - name: Set up Gradle
+        uses: gradle/actions/setup-gradle@v4
+
+      - name: Build debug APK
+        run: |
+          cd "$PROJECT_DIR"
+          if [ -f gradlew ]; then
+            chmod +x gradlew
+            ./gradlew assembleDebug
+          else
+            gradle assembleDebug
+          fi
+
+      - name: Upload APK
+        uses: actions/upload-artifact@v4
+        with:
+          name: PosterPro-APK
+          path: ${{ env.PROJECT_DIR }}/app/build/outputs/apk/debug/*.apk
+          if-no-files-found: error
